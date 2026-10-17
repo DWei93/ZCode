@@ -34,6 +34,12 @@ export const resolveRuntimePackageDirectory = async ({
   if (workspacePackageDirectory) {
     const directory = workspacePackageDirectory;
     await assertPackageDirectory(packageName, directory);
+    if (!(await hasBuildScript(directory))) {
+      // Source-only workspace packages export TypeScript directly and are
+      // bundled at build time; they never emit dist/index.js, so requiring it
+      // would fail `build:zcode` on a clean checkout.
+      return directory;
+    }
     if (!(await exists(resolve(directory, "dist", "index.js")))) {
       throw new Error(`Missing ${packageName} dist files. Run \`pnpm build\` before \`pnpm sea\`.`);
     }
@@ -114,6 +120,15 @@ const findPackageRoot = async (entryPath, packageName) => {
 const assertPackageDirectory = async (packageName, directory) => {
   if (!(await exists(resolve(directory, "package.json")))) {
     throw new Error(`Missing package.json for ${packageName} at ${directory}`);
+  }
+};
+
+const hasBuildScript = async (directory) => {
+  try {
+    const packageJson = JSON.parse(await readFile(resolve(directory, "package.json"), "utf8"));
+    return typeof packageJson?.scripts?.build === "string";
+  } catch {
+    return false;
   }
 };
 
